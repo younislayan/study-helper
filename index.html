@@ -1,0 +1,298 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>مساعد الدراسة</title>
+<meta name="description" content="An Arabic study helper that explains computer science topics simply, powered by Claude.">
+<style>
+  :root {
+    --bg: #fbfaf7;
+    --surface: #ffffff;
+    --text: #1d1b19;
+    --muted: #6b6560;
+    --line: #e8e4de;
+    --accent: #c2410c;
+    --accent-soft: #fdeee6;
+    --user: #f2efe9;
+    --danger: #b91c1c;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #151413;
+      --surface: #1e1c1a;
+      --text: #efebe6;
+      --muted: #a39c94;
+      --line: #2f2c29;
+      --accent: #fb923c;
+      --accent-soft: #2e1f16;
+      --user: #282522;
+      --danger: #f87171;
+    }
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font-family: "Segoe UI", Tahoma, system-ui, sans-serif;
+    font-size: 17px; line-height: 1.8;
+    display: flex; flex-direction: column;
+  }
+  header {
+    border-bottom: 1px solid var(--line); background: var(--surface);
+    padding: 12px 16px;
+  }
+  header .row { max-width: 760px; margin: 0 auto; display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+  header h1 { font-size: 19px; margin: 0; }
+  header p { margin: 0; color: var(--muted); font-size: 13px; }
+  .linkbtn { background: none; border: none; color: var(--muted); cursor: pointer; font: inherit; font-size: 14px; text-decoration: underline; }
+
+  #chat { flex: 1; overflow-y: auto; padding: 20px 16px; }
+  .inner { max-width: 760px; margin: 0 auto; }
+
+  .msg { margin: 0 0 16px; padding: 14px 18px; border-radius: 14px; white-space: pre-wrap; word-wrap: break-word; }
+  .msg.user { background: var(--user); margin-inline-start: 15%; }
+  .msg.bot { background: var(--surface); border: 1px solid var(--line); margin-inline-end: 5%; }
+  .msg.error { background: var(--surface); border: 1px solid var(--danger); color: var(--danger); }
+  .msg code { background: var(--user); padding: 1px 5px; border-radius: 4px; font-family: Consolas, monospace; direction: ltr; unicode-bidi: embed; }
+  .msg pre { direction: ltr; text-align: left; background: var(--user); padding: 12px; border-radius: 8px; overflow-x: auto; white-space: pre; font-family: Consolas, monospace; font-size: 14px; line-height: 1.5; }
+  .typing { color: var(--muted); }
+
+  .welcome { text-align: center; padding: 28px 8px; }
+  .welcome h2 { margin: 0 0 6px; font-size: 24px; }
+  .welcome p { color: var(--muted); margin: 0 0 20px; }
+  .chips { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; }
+  .chip { border: 1px solid var(--line); background: var(--surface); color: var(--text); border-radius: 999px; padding: 8px 14px; cursor: pointer; font: inherit; font-size: 15px; }
+  .chip:hover { border-color: var(--accent); color: var(--accent); }
+
+  .modes { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 8px; }
+  .mode { border: 1px solid var(--line); background: var(--surface); color: var(--muted); border-radius: 999px; padding: 4px 12px; cursor: pointer; font: inherit; font-size: 14px; }
+  .mode[aria-pressed="true"] { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); font-weight: 600; }
+
+  footer { border-top: 1px solid var(--line); background: var(--surface); padding: 12px 16px; }
+  form { display: flex; gap: 8px; }
+  textarea {
+    flex: 1; resize: none; font: inherit; color: var(--text); background: var(--bg);
+    border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; min-height: 48px; max-height: 160px;
+  }
+  textarea:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+  button.send { background: var(--accent); color: #fff; border: none; border-radius: 10px; padding: 0 20px; font: inherit; font-weight: 600; cursor: pointer; }
+  button.send:disabled { opacity: 0.5; cursor: default; }
+
+  dialog { border: 1px solid var(--line); border-radius: 14px; background: var(--surface); color: var(--text); max-width: 460px; width: calc(100% - 32px); padding: 22px; }
+  dialog::backdrop { background: rgba(0,0,0,0.4); }
+  dialog h3 { margin: 0 0 8px; }
+  dialog p { color: var(--muted); font-size: 15px; margin: 0 0 14px; }
+  dialog input { width: 100%; font: inherit; direction: ltr; padding: 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); color: var(--text); }
+  dialog .actions { display: flex; gap: 8px; margin-top: 14px; }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="row">
+    <div>
+      <h1>مساعد الدراسة</h1>
+      <p>شرح مواضيع علوم الحاسوب بالعربية</p>
+    </div>
+    <button class="linkbtn" id="keyBtn" type="button">مفتاح API</button>
+  </div>
+</header>
+
+<main id="chat">
+  <div class="inner" id="messages">
+    <div class="welcome" id="welcome">
+      <h2>أهلاً! شو بدك تفهم اليوم؟</h2>
+      <p>اسأل عن أي موضوع في علوم الحاسوب، بالعربية أو بالإنجليزية.</p>
+      <div class="chips">
+        <button class="chip" type="button">ما هو الـ pointer في لغة C؟</button>
+        <button class="chip" type="button">اشرح لي الـ recursion بمثال بسيط</button>
+        <button class="chip" type="button">ما الفرق بين process و thread؟</button>
+        <button class="chip" type="button">كيف يعمل Binary Search؟</button>
+      </div>
+    </div>
+  </div>
+</main>
+
+<footer>
+  <div class="inner">
+    <div class="modes" role="group" aria-label="نوع الإجابة">
+      <button class="mode" type="button" data-mode="explain" aria-pressed="true">اشرح</button>
+      <button class="mode" type="button" data-mode="example" aria-pressed="false">أعطني مثال</button>
+      <button class="mode" type="button" data-mode="quiz" aria-pressed="false">اختبرني</button>
+    </div>
+    <form id="form">
+      <textarea id="input" rows="1" placeholder="اكتب سؤالك هنا…" aria-label="سؤالك"></textarea>
+      <button class="send" id="send" type="submit">إرسال</button>
+    </form>
+  </div>
+</footer>
+
+<dialog id="keyDialog">
+  <h3>مفتاح Claude API</h3>
+  <p>المفتاح يُحفظ في متصفحك فقط، ولا يُرسل إلا إلى Anthropic. احصل عليه من platform.claude.com.</p>
+  <input id="keyInput" type="password" placeholder="sk-ant-..." autocomplete="off">
+  <div class="actions">
+    <button class="send" id="keySave" type="button">حفظ</button>
+    <button class="linkbtn" id="keyClear" type="button">حذف المفتاح</button>
+  </div>
+</dialog>
+
+<script type="module">
+import Anthropic from "https://cdn.jsdelivr.net/npm/@anthropic-ai/sdk/+esm";
+
+// ---------- Settings ----------
+const MODEL = "claude-opus-5";
+
+// The instructions Claude follows. This is the "personality" of the app.
+const SYSTEM_PROMPT = `You are a friendly computer science tutor for Arabic-speaking university students.
+
+Always answer in clear, simple Modern Standard Arabic, the way a good teaching assistant talks to a student.
+- Keep technical terms in English, the way Arab developers actually say them (for example: pointer, recursion, thread, array). The first time a term appears, you may add a short Arabic explanation next to it.
+- Code, commands and variable names are always in English, inside code blocks.
+- Explain step by step. Start with the core idea in one or two sentences, then go deeper.
+- Prefer short paragraphs and small examples over long theory.
+- If the student writes in English, still answer in Arabic unless they ask otherwise.
+- If you are not sure about something, say so instead of guessing.`;
+
+// Extra instruction added depending on the button the student picked.
+const MODE_HINTS = {
+  explain: "",
+  example: "The student wants a concrete worked example. Lead with a short example (with code if relevant), then explain it line by line.",
+  quiz: "The student wants to be tested. Ask them ONE question at a time about the topic and wait for their answer. When they answer, tell them if they were right and explain why, then ask the next question.",
+};
+
+// ---------- Page elements ----------
+const messagesEl = document.getElementById("messages");
+const chatEl = document.getElementById("chat");
+const form = document.getElementById("form");
+const input = document.getElementById("input");
+const sendBtn = document.getElementById("send");
+const keyDialog = document.getElementById("keyDialog");
+const keyInput = document.getElementById("keyInput");
+
+// ---------- API key (stored only in this browser) ----------
+// If the browser blocks saving (private window, strict settings), keep it in memory for this visit.
+let memoryKey = "";
+function getKey() {
+  try { return localStorage.getItem("anthropic_key") || memoryKey; } catch { return memoryKey; }
+}
+function setKey(k) {
+  memoryKey = k;
+  try { k ? localStorage.setItem("anthropic_key", k) : localStorage.removeItem("anthropic_key"); } catch {}
+}
+document.getElementById("keyBtn").onclick = () => { keyInput.value = getKey(); keyDialog.showModal(); };
+document.getElementById("keySave").onclick = () => { setKey(keyInput.value.trim()); keyDialog.close(); };
+document.getElementById("keyClear").onclick = () => { setKey(""); keyInput.value = ""; keyDialog.close(); };
+
+// ---------- Answer modes ----------
+let mode = "explain";
+document.querySelectorAll(".mode").forEach(btn => {
+  btn.onclick = () => {
+    mode = btn.dataset.mode;
+    document.querySelectorAll(".mode").forEach(b => b.setAttribute("aria-pressed", String(b === btn)));
+  };
+});
+
+// ---------- Showing messages ----------
+function escapeHtml(s) {
+  return s.replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+}
+// Very small formatter: ```code blocks```, `inline code` and **bold**. Everything is escaped first.
+function format(text) {
+  let html = escapeHtml(text);
+  html = html.replace(/```(\w*)\n?([\s\S]*?)```/g, (_, lang, code) => `<pre>${code.replace(/\n$/, "")}</pre>`);
+  html = html.replace(/`([^`\n]+)`/g, "<code>$1</code>");
+  html = html.replace(/\*\*([^*\n]+)\*\*/g, "<b>$1</b>");
+  return html;
+}
+function addMessage(role, text) {
+  document.getElementById("welcome")?.remove();
+  const div = document.createElement("div");
+  div.className = "msg " + role;
+  div.innerHTML = format(text);
+  messagesEl.appendChild(div);
+  chatEl.scrollTop = chatEl.scrollHeight;
+  return div;
+}
+
+// ---------- Talking to Claude ----------
+const history = []; // the whole conversation, sent every time so Claude remembers it
+
+async function ask(question) {
+  const key = getKey();
+  if (!key) { keyDialog.showModal(); return; }
+
+  addMessage("user", question);
+  history.push({ role: "user", content: question });
+
+  const botDiv = addMessage("bot", "");
+  botDiv.innerHTML = '<span class="typing">يفكر…</span>';
+  sendBtn.disabled = true;
+
+  const client = new Anthropic({ apiKey: key, dangerouslyAllowBrowser: true });
+  const system = MODE_HINTS[mode] ? SYSTEM_PROMPT + "\n\n" + MODE_HINTS[mode] : SYSTEM_PROMPT;
+
+  let answer = "";
+  try {
+    const stream = client.beta.messages.stream({
+      model: MODEL,
+      max_tokens: 16000,
+      system,
+      messages: history,
+      output_config: { effort: "low" },   // quick, cheap answers are enough for tutoring
+      betas: ["server-side-fallback-2026-07-01"],
+      fallbacks: "default",               // if Opus 5 declines, Anthropic retries on another model
+    });
+
+    for await (const event of stream) {
+      if (event.type === "content_block_delta" && event.delta.type === "text_delta") {
+        answer += event.delta.text;
+        botDiv.innerHTML = format(answer);
+        chatEl.scrollTop = chatEl.scrollHeight;
+      }
+    }
+
+    const final = await stream.finalMessage();
+    if (final.stop_reason === "refusal") {
+      botDiv.className = "msg error";
+      botDiv.textContent = "لم أستطع الإجابة على هذا السؤال. جرّب صياغته بطريقة أخرى.";
+      history.pop();
+      return;
+    }
+    if (final.stop_reason === "max_tokens") {
+      answer += "\n\n(الإجابة طويلة وتم قطعها — اطلب مني المتابعة.)";
+      botDiv.innerHTML = format(answer);
+    }
+    // Keep the full reply (including any thinking blocks) so the next turn has the right context.
+    history.push({ role: "assistant", content: final.content });
+  } catch (err) {
+    history.pop();
+    botDiv.className = "msg error";
+    const status = err?.status;
+    botDiv.textContent =
+      status === 401 ? "المفتاح غير صحيح. اضغط على «مفتاح API» في الأعلى وأدخله من جديد." :
+      status === 429 ? "طلبات كثيرة في وقت قصير. انتظر قليلاً ثم حاول مرة أخرى." :
+      status === 400 && /credit/i.test(err.message) ? "رصيد الحساب انتهى. أضف رصيداً في platform.claude.com." :
+      "حدث خطأ: " + (err?.message || err);
+  } finally {
+    sendBtn.disabled = false;
+    input.focus();
+  }
+}
+
+// ---------- Wiring the form ----------
+form.onsubmit = e => {
+  e.preventDefault();
+  const q = input.value.trim();
+  if (!q || sendBtn.disabled) return;
+  input.value = "";
+  ask(q);
+};
+input.addEventListener("keydown", e => {
+  if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); form.requestSubmit(); }
+});
+document.querySelectorAll(".chip").forEach(c => c.onclick = () => ask(c.textContent));
+</script>
+</body>
+</html>
