@@ -1,5 +1,7 @@
 # مساعد الدراسة — Arabic CS Study Helper
 
+[![tests](https://github.com/younislayan/study-helper/actions/workflows/tests.yml/badge.svg)](https://github.com/younislayan/study-helper/actions/workflows/tests.yml)
+
 A chat app that explains computer science topics in clear Arabic, built for Arabic-speaking university students.
 
 **Live:** https://younislayan.github.io/study-helper/
@@ -33,9 +35,29 @@ The app needs a Claude API key from [platform.claude.com](https://platform.claud
 
 Calling the API straight from a browser is fine for a personal tool like this, where each person uses their own key. A public app with a shared key would need a small server to keep the key secret.
 
+## Tests
+
+End-to-end tests with **Playwright (Python)**, run automatically on every push by GitHub Actions.
+
+The Claude API is intercepted and answered with a recorded streaming response, so the suite is
+deterministic, needs no API key and costs nothing to run. 13 tests cover:
+
+- the welcome screen and example questions
+- asking without a key opens the key dialog and sends nothing
+- a streamed answer is displayed, and Markdown (headings, bold, code blocks) is rendered as HTML
+- API errors map to the right Arabic message (invalid key, rate limit)
+- conversations are saved, survive a page reload, and can be reopened and deleted
+- answer modes change what is sent to the model
+
+```bash
+pip install -r requirements-dev.txt
+python -m playwright install chromium
+python -m pytest tests -q
+```
+
 ## Built with
 
-HTML · CSS · JavaScript · Claude API (Anthropic SDK)
+HTML · CSS · JavaScript · Claude API (Anthropic SDK) · Playwright · pytest · GitHub Actions
 
 ---
 
