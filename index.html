@@ -68,6 +68,33 @@
   .msg pre { direction: ltr; text-align: left; background: var(--user); padding: 12px; border-radius: 8px; overflow-x: auto; white-space: pre; font-family: Consolas, monospace; font-size: 14px; line-height: 1.5; }
   .typing { color: var(--muted); }
 
+  /* Saved chats drawer */
+  #overlay { position: fixed; inset: 0; background: rgba(0,0,0,.35); display: none; z-index: 20; }
+  #overlay.open { display: block; }
+  #drawer {
+    position: fixed; top: 0; inset-inline-end: 0; height: 100%; width: min(300px, 85vw); z-index: 21;
+    background: var(--surface); border-inline-start: 1px solid var(--line);
+    transform: translateX(100%); transition: transform .2s ease;
+    display: flex; flex-direction: column; padding: 14px;
+  }
+  [dir="rtl"] #drawer { transform: translateX(-100%); }
+  #drawer.open, [dir="rtl"] #drawer.open { transform: translateX(0); }
+  .drawer-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+  .newchat {
+    width: 100%; border: 1px solid var(--accent); background: var(--accent-soft); color: var(--accent);
+    border-radius: 10px; padding: 9px; font: inherit; font-weight: 600; cursor: pointer; margin-bottom: 12px;
+  }
+  #chatList { list-style: none; margin: 0; padding: 0; overflow-y: auto; }
+  #chatList li { display: flex; align-items: center; gap: 6px; border-radius: 8px; }
+  #chatList li:hover { background: var(--user); }
+  #chatList button.pick {
+    flex: 1; background: none; border: none; color: var(--text); font: inherit; font-size: 15px;
+    text-align: start; padding: 9px 8px; cursor: pointer; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  #chatList li.active button.pick { color: var(--accent); font-weight: 600; }
+  #chatList button.del { background: none; border: none; color: var(--muted); cursor: pointer; font-size: 16px; padding: 4px 8px; }
+  #chatList .empty { color: var(--muted); font-size: 14px; padding: 8px; }
+
   .welcome { text-align: center; padding: 28px 8px; }
   .welcome h2 { margin: 0 0 6px; font-size: 24px; }
   .welcome p { color: var(--muted); margin: 0 0 20px; }
@@ -105,9 +132,22 @@
       <h1>مساعد الدراسة</h1>
       <p>شرح مواضيع علوم الحاسوب بالعربية</p>
     </div>
-    <button class="linkbtn" id="keyBtn" type="button">مفتاح API</button>
+    <div>
+      <button class="linkbtn" id="chatsBtn" type="button">محادثاتي</button>
+      <button class="linkbtn" id="keyBtn" type="button">مفتاح API</button>
+    </div>
   </div>
 </header>
+
+<div id="overlay"></div>
+<aside id="drawer" aria-label="المحادثات المحفوظة">
+  <div class="drawer-head">
+    <b>محادثاتي</b>
+    <button class="linkbtn" id="closeDrawer" type="button">إغلاق</button>
+  </div>
+  <button class="newchat" id="newChatBtn" type="button">+ محادثة جديدة</button>
+  <ul id="chatList"></ul>
+</aside>
 
 <main id="chat">
   <div class="inner" id="messages">
@@ -268,15 +308,96 @@ function addMessage(role, text) {
   return div;
 }
 
-// ---------- Talking to Claude ----------
-const history = []; // the whole conversation, sent every time so Claude remembers it
+// ---------- Saved chats (kept in this browser only) ----------
+const STORE = "study_helper_chats";
+const welcomeHTML = messagesEl.innerHTML;   // kept so an empty chat looks like the first visit
+const history = [];                          // the open conversation, sent with every request
+let chats = [];                              // [{ id, title, history }]
+let currentId = null;
+let memChats = null;                         // fallback when the browser blocks storage
 
+function loadChats() {
+  try { chats = JSON.parse(localStorage.getItem(STORE) || "[]"); }
+  catch { chats = memChats || []; }
+  if (!Array.isArray(chats)) chats = [];
+}
+function saveChats() {
+  memChats = chats;
+  try { localStorage.setItem(STORE, JSON.stringify(chats)); } catch {}
+}
+const currentChat = () => chats.find(c => c.id === currentId) || null;
+
+// An assistant message is a list of blocks; we only display its text.
+const textOf = content =>
+  typeof content === "string" ? content
+    : (content || []).filter(b => b.type === "text").map(b => b.text).join("");
+
+function renderMessages() {
+  messagesEl.innerHTML = "";
+  if (!history.length) { messagesEl.innerHTML = welcomeHTML; wireChips(); return; }
+  for (const m of history) addMessage(m.role === "user" ? "user" : "bot", textOf(m.content));
+}
+
+function renderChatList() {
+  const ul = document.getElementById("chatList");
+  ul.innerHTML = "";
+  if (!chats.length) { ul.innerHTML = '<li class="empty">لا توجد محادثات محفوظة بعد.</li>'; return; }
+  for (const c of chats) {
+    const li = document.createElement("li");
+    if (c.id === currentId) li.className = "active";
+    const pick = document.createElement("button");
+    pick.className = "pick"; pick.type = "button"; pick.textContent = c.title;
+    pick.onclick = () => openChat(c.id);
+    const del = document.createElement("button");
+    del.className = "del"; del.type = "button"; del.title = "حذف"; del.textContent = "✕";
+    del.onclick = () => deleteChat(c.id);
+    li.append(pick, del);
+    ul.appendChild(li);
+  }
+}
+
+function openChat(id) {
+  const c = chats.find(x => x.id === id);
+  if (!c) return;
+  currentId = id;
+  history.length = 0;
+  history.push(...c.history);
+  renderMessages(); renderChatList(); closeDrawer();
+}
+function newChat() {
+  currentId = null;
+  history.length = 0;
+  renderMessages(); renderChatList(); closeDrawer();
+  input.focus();
+}
+function deleteChat(id) {
+  chats = chats.filter(c => c.id !== id);
+  saveChats();
+  if (id === currentId) newChat(); else renderChatList();
+}
+
+const openDrawer = () => { document.getElementById("drawer").classList.add("open"); document.getElementById("overlay").classList.add("open"); };
+function closeDrawer() { document.getElementById("drawer").classList.remove("open"); document.getElementById("overlay").classList.remove("open"); }
+document.getElementById("chatsBtn").onclick = () => { renderChatList(); openDrawer(); };
+document.getElementById("closeDrawer").onclick = closeDrawer;
+document.getElementById("overlay").onclick = closeDrawer;
+document.getElementById("newChatBtn").onclick = newChat;
+
+loadChats();
+renderChatList();
+
+// ---------- Talking to Claude ----------
 async function ask(question) {
   const key = getKey();
   if (!key) { keyDialog.showModal(); return; }
 
   addMessage("user", question);
   history.push({ role: "user", content: question });
+
+  if (!currentChat()) {   // first question of a new chat: create it and name it after the question
+    currentId = Date.now().toString(36);
+    chats.unshift({ id: currentId, title: question.slice(0, 40), history: [] });
+  }
 
   const botDiv = addMessage("bot", "");
   botDiv.innerHTML = '<span class="typing">يفكر…</span>';
@@ -318,8 +439,12 @@ async function ask(question) {
     }
     // Keep the full reply (including any thinking blocks) so the next turn has the right context.
     history.push({ role: "assistant", content: final.content });
+    const chat = currentChat();
+    if (chat) { chat.history = history.slice(); saveChats(); renderChatList(); }
   } catch (err) {
     history.pop();
+    const chat = currentChat();                       // don't leave an empty chat behind
+    if (chat && !chat.history.length) { chats = chats.filter(c => c.id !== chat.id); currentId = null; renderChatList(); }
     botDiv.className = "msg error";
     const status = err?.status;
     botDiv.textContent =
@@ -344,7 +469,10 @@ form.onsubmit = e => {
 input.addEventListener("keydown", e => {
   if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); form.requestSubmit(); }
 });
-document.querySelectorAll(".chip").forEach(c => c.onclick = () => ask(c.textContent));
+function wireChips() {
+  document.querySelectorAll(".chip").forEach(c => c.onclick = () => ask(c.textContent));
+}
+wireChips();
 </script>
 </body>
 </html>
