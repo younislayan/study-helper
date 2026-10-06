@@ -4,8 +4,7 @@ Every test drives the real app in a real browser. The Claude API is mocked, so t
 suite is deterministic, needs no API key and costs nothing to run.
 """
 
-from conftest import CHATS_STORAGE, fake_claude
-
+from conftest import CHATS_STORAGE, fake_claude, fake_slow_claude, KEY_STORAGE
 FIRST_EXAMPLE = "ما هو الـ pointer في لغة C؟"
 
 
@@ -148,3 +147,20 @@ def test_quiz_mode_is_sent_to_the_model(app):
     app.wait_for_timeout(1000)
 
     assert "ONE question at a time" in sent.get("system", "")
+
+
+def test_user_can_scroll_up_while_answer_is_streaming(page, app_url):
+    long_answer = " ".join(f"word{i}" for i in range(600))
+    page.add_init_script(f"localStorage.setItem('{KEY_STORAGE}', 'sk-ant-test-key');")
+    fake_slow_claude(page, text=long_answer)
+    page.goto(app_url)
+
+    page.click("button.chip >> nth=0")
+    page.wait_for_selector(".msg.bot")
+    page.wait_for_function(
+        "document.querySelector('#chat').scrollHeight > document.querySelector('#chat').clientHeight + 200")
+
+    page.evaluate("document.querySelector('#chat').scrollTop = 0")
+    page.wait_for_timeout(500)
+
+    assert page.evaluate("document.querySelector('#chat').scrollTop") < 50

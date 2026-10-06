@@ -97,3 +97,50 @@ def app(page, app_url):
 def app_without_key(page, app_url):
     page.goto(app_url)
     return page
+
+
+def fake_slow_claude(page, *, text: str, chunks: int = 40, delay_ms: int = 100):
+    """Fake the Claude API, but stream the answer slowly, a few words at a time.
+
+    A normal mocked response arrives all at once, so a test can never act *while* the
+    answer is still appearing. Here we replace the browser's fetch() for the Claude API
+    with one that hands out the answer in `chunks` pieces, `delay_ms` apart.
+    """
+    words = text.split(" ")
+    size = max(1, len(words) // chunks)
+    pieces = [" ".join(words[i:i + size]) + " " for i in range(0, len(words), size)]
+    events = [("message_start", {"type": "message_start", "message": {
+                  "id": "msg_test", "type": "message", "role": "assistant", "model": "claude-opus-5",
+                  "content": [], "stop_reason": None, "stop_sequence": None,
+                  "usage": {"input_tokens": 1, "output_tokens": 1}}}),
+              ("content_block_start", {"type": "content_block_start", "index": 0,
+                                       "content_block": {"type": "text", "text": ""}})]
+    events += [("content_block_delta", {"type": "content_block_delta", "index": 0,
+                                        "delta": {"type": "text_delta", "text": p}}) for p in pieces]
+    events += [("content_block_stop", {"type": "content_block_stop", "index": 0}),
+               ("message_delta", {"type": "message_delta",
+                                  "delta": {"stop_reason": "end_turn", "stop_sequence": None},
+                                  "usage": {"output_tokens": 20}}),
+               ("message_stop", {"type": "message_stop"})]
+    frames = [f"event: {name}\ndata: {json.dumps(data)}\n\n" for name, data in events]
+
+    page.add_init_script(f"""
+      const FRAMES = {json.dumps(frames)};
+      const realFetch = window.fetch.bind(window);
+      window.fetch = (input, init) => {{
+        const url = typeof input === 'string' ? input : input.url;
+        if (!url.includes('/v1/messages')) return realFetch(input, init);
+        const encoder = new TextEncoder();
+        let i = 0;
+        const body = new ReadableStream({{
+          pull(controller) {{
+            return new Promise(resolve => setTimeout(() => {{
+              if (i < FRAMES.length) controller.enqueue(encoder.encode(FRAMES[i++]));
+              else controller.close();
+              resolve();
+            }}, {delay_ms}));
+          }}
+        }});
+        return Promise.resolve(new Response(body, {{ status: 200, headers: {{ 'content-type': 'text/event-stream' }} }}));
+      }};
+    """)

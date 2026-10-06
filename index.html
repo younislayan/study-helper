@@ -421,8 +421,10 @@ async function ask(question) {
     for await (const event of stream) {
       if (event.type === "content_block_delta" && event.delta.type === "text_delta") {
         answer += event.delta.text;
+        // Only follow the answer down if the reader is already at the bottom.
+        const nearBottom = chatEl.scrollHeight - chatEl.scrollTop - chatEl.clientHeight < 80;
         botDiv.innerHTML = format(answer);
-        chatEl.scrollTop = chatEl.scrollHeight;
+        if (nearBottom) chatEl.scrollTop = chatEl.scrollHeight;
       }
     }
 
